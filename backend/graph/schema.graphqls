@@ -2,6 +2,7 @@ type Word {
   id: ID!
   word: String!
   language: String!
+  exampleUsage: String!
 }
 
 type Translation {
@@ -16,4 +17,5 @@ type Query {
 
 type Mutation {
   addTranslation(englishWord: String!, polishWord: String!): Translation!
+  addWord(word: String!, Language: String!, exampleUsage: String!): Word!
 }

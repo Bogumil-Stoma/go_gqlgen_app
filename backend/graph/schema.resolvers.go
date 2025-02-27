@@ -8,51 +8,110 @@ import (
 	"backend/database"
 	"backend/graph/model"
 	"context"
-	"errors"
 	"fmt"
+	"strconv"
 )
 
 // AddTranslation is the resolver for the addTranslation field.
 func (r *mutationResolver) AddTranslation(ctx context.Context, englishWord string, polishWord string) (*model.Translation, error) {
-	if r.DB == nil {
-		return nil, errors.New("database connection is nil")
-	}
 	var engWord database.Word
 	var plWord database.Word
 	var existingTranslation model.Translation
 
-	err := r.DB.FirstOrCreate(&engWord, database.Word{Word: englishWord, Language: "EN"}).Error
+	tx := r.DB.Begin()
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	err := tx.FirstOrCreate(&engWord, database.Word{Word: englishWord, Language: "EN"}).Error
 	if err != nil {
+		tx.Rollback()
 		return nil, fmt.Errorf("an error has occured while inserting english word")
 	}
-	err = r.DB.FirstOrCreate(&plWord, database.Word{Word: polishWord, Language: "PL"}).Error
+	err = tx.FirstOrCreate(&plWord, database.Word{Word: polishWord, Language: "PL"}).Error
 	if err != nil {
+		tx.Rollback()
 		return nil, fmt.Errorf("an error has occured while inserting polish word")
 	}
 
 	sortedTranslation := model.TranslationFromInts(plWord.ID, engWord.ID)
 	sortedTranslation.SortTranslation()
 
-	err = r.DB.Where("word_id = ? AND translation_id = ?", sortedTranslation.WordID, sortedTranslation.TranslationID).First(&existingTranslation).Error
+	err = tx.Where("word_id = ? AND translation_id = ?", sortedTranslation.WordID, sortedTranslation.TranslationID).First(&existingTranslation).Error
 	if err == nil {
+		tx.Rollback()
 		return nil, fmt.Errorf("translation already exists")
 	}
 
-	err = r.DB.Create(&sortedTranslation).Error
+	err = tx.Create(&sortedTranslation).Error
 	if err != nil {
-		return nil, err
+		tx.Rollback()
+		return nil, fmt.Errorf("an error has occured while inserting translation")
 	}
+
+	tx.Commit()
 	return &sortedTranslation, nil
 }
 
-// GetPolishWords is the resolver for the getPolishWords field.
-func (r *queryResolver) GetPolishWords(ctx context.Context, englishWord string) ([]*model.Word, error) {
-	panic(fmt.Errorf("not implemented: GetPolishWords - getPolishWords"))
+func (r *queryResolver) GetTranslations(ctx context.Context, wordToTranslate string, language string) ([]*model.Word, error) {
+	var word database.Word
+	var translatedWords []*model.Word
+	var translations []*model.Translation
+	var translatedWordIDS []string
+
+	tx := r.DB.Begin()
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	err := tx.Where("word = ? and language = ?", wordToTranslate, language).First(&word).Error
+	if err != nil {
+		tx.Rollback()
+		return nil, fmt.Errorf("an error has occured while selecting word")
+	}
+
+	err = tx.Where("translation_id = ? or word_id = ?", word.ID, word.ID).Find(&translations).Error
+	if err != nil {
+		tx.Rollback()
+		return nil, fmt.Errorf("an error has occured while selecting translation ids")
+	}
+
+	for _, t := range translations {
+		if strconv.Itoa(int(word.ID)) == t.WordID {
+			translatedWordIDS = append(translatedWordIDS, t.TranslationID)
+		} else {
+			translatedWordIDS = append(translatedWordIDS, t.WordID)
+		}
+	}
+
+	err = tx.Where("id in (?)", translatedWordIDS).Find(&translatedWords).Error
+	if err != nil {
+		tx.Rollback()
+		return nil, fmt.Errorf("an error has occured while selecting translations")
+	}
+
+	tx.Commit()
+	return translatedWords, nil
 }
 
-// GetEnglishWords is the resolver for the getEnglishWords field.
+func (r *queryResolver) GetPolishWords(ctx context.Context, englishWord string) ([]*model.Word, error) {
+	translatedWords, err := r.GetTranslations(ctx, englishWord, "EN")
+	if err != nil {
+		return nil, err
+	}
+	return translatedWords, nil
+}
+
 func (r *queryResolver) GetEnglishWords(ctx context.Context, polishWord string) ([]*model.Word, error) {
-	panic(fmt.Errorf("not implemented: GetEnglishWords - getEnglishWords"))
+	translatedWords, err := r.GetTranslations(ctx, polishWord, "PL")
+	if err != nil {
+		return nil, err
+	}
+	return translatedWords, nil
 }
 
 // Mutation returns MutationResolver implementation.
@@ -63,25 +122,3 @@ func (r *Resolver) Query() QueryResolver { return &queryResolver{r} }
 
 type mutationResolver struct{ *Resolver }
 type queryResolver struct{ *Resolver }
-
-// !!! WARNING !!!
-// The code below was going to be deleted when updating resolvers. It has been copied here so you have
-// one last chance to move it out of harms way if you want. There are two reasons this happens:
-//  - When renaming or deleting a resolver the old code will be put in here. You can safely delete
-//    it when you're done.
-//  - You have helper methods in this file. Move them out to keep these resolver files clean.
-/*
-	func (r *translationResolver) WordID(ctx context.Context, obj *model.Translation) (string, error) {
-	panic(fmt.Errorf("not implemented: WordID - wordID"))
-}
-func (r *translationResolver) TranslationID(ctx context.Context, obj *model.Translation) (string, error) {
-	panic(fmt.Errorf("not implemented: TranslationID - translationID"))
-}
-func (r *wordResolver) ID(ctx context.Context, obj *model.Word) (string, error) {
-	panic(fmt.Errorf("not implemented: ID - id"))
-}
-func (r *Resolver) Translation() TranslationResolver { return &translationResolver{r} }
-func (r *Resolver) Word() WordResolver { return &wordResolver{r} }
-type translationResolver struct{ *Resolver }
-type wordResolver struct{ *Resolver }
-*/
