@@ -11,9 +11,9 @@ import (
 
 type Word struct {
 	ID           uint    `gorm:"primaryKey;autoIncrement"`
-	Word         string  `gorm:"unique"`
+	Word         string  `gorm:"not null;uniqueIndex:idx_word_language"`
 	Translations []*Word `gorm:"many2many:translations;joinForeignKey:word_id;joinReferences:translation_id"`
-	Language     string
+	Language     string  `gorm:"not null;uniqueIndex:idx_word_language"`
 }
 
 var DB *gorm.DB
