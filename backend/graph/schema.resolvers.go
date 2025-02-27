@@ -10,14 +10,19 @@ import (
 	"fmt"
 )
 
-// CreateTodo is the resolver for the createTodo field.
-func (r *mutationResolver) CreateTodo(ctx context.Context, input model.NewTodo) (*model.Todo, error) {
-	panic(fmt.Errorf("not implemented: CreateTodo - createTodo"))
+// AddTranslation is the resolver for the addTranslation field.
+func (r *mutationResolver) AddTranslation(ctx context.Context, englishWord string, polishWord string) (*model.Translation, error) {
+	panic(fmt.Errorf("not implemented: AddTranslation - addTranslation"))
 }
 
-// Todos is the resolver for the todos field.
-func (r *queryResolver) Todos(ctx context.Context) ([]*model.Todo, error) {
-	panic(fmt.Errorf("not implemented: Todos - todos"))
+// GetPolishWords is the resolver for the getPolishWords field.
+func (r *queryResolver) GetPolishWords(ctx context.Context, englishWord string) ([]*model.Word, error) {
+	panic(fmt.Errorf("not implemented: GetPolishWords - getPolishWords"))
+}
+
+// GetEnglishWords is the resolver for the getEnglishWords field.
+func (r *queryResolver) GetEnglishWords(ctx context.Context, polishWord string) ([]*model.Word, error) {
+	panic(fmt.Errorf("not implemented: GetEnglishWords - getEnglishWords"))
 }
 
 // Mutation returns MutationResolver implementation.

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"backend/database"
 	"backend/graph"
 	"log"
 	"net/http"
@@ -21,8 +22,9 @@ func main() {
 	if port == "" {
 		port = defaultPort
 	}
-
-	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{}}))
+	db := database.Connect()
+	resolver := &graph.Resolver{DB: db}
+	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: resolver}))
 
 	srv.AddTransport(transport.Options{})
 	srv.AddTransport(transport.GET{})
