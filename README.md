@@ -1,1 +1,7 @@
-# go_gqlgen_app
+# go gqlgen app
+
+## How to run project?
+
+Simply use
+
+``docker compose up ``
