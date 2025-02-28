@@ -1,6 +1,7 @@
 package database
 
 import (
+	"backend/graph/model"
 	"fmt"
 	"log"
 	"os"
@@ -8,13 +9,6 @@ import (
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
-
-type Word struct {
-	ID           uint    `gorm:"primaryKey;autoIncrement"`
-	Word         string  `gorm:"not null;uniqueIndex:idx_word_language"`
-	Translations []*Word `gorm:"many2many:translations;joinForeignKey:word_id;joinReferences:translation_id"`
-	Language     string  `gorm:"not null;uniqueIndex:idx_word_language"`
-}
 
 var DB *gorm.DB
 
@@ -36,7 +30,7 @@ func Connect() *gorm.DB {
 
 	fmt.Println("Connected to database")
 
-	err = DB.AutoMigrate(&Word{})
+	err = DB.AutoMigrate(&model.Word{})
 	if err != nil {
 		log.Fatal(err)
 	}
