@@ -101,15 +101,45 @@ func (r *mutationResolver) DeleteWord(ctx context.Context, word string, language
 }
 
 // UpdateWord is the resolver for the updateWord field.
-func (r *mutationResolver) UpdateWord(ctx context.Context, word string, language string, exampleUsage string) (*model.Word, error) {
-	panic(fmt.Errorf("not implemented: UpdateWord - updateWord"))
+func (r *mutationResolver) UpdateWord(ctx context.Context, sourceWord string, sourceLanguage string, updatedWord string, updatedExampleUsage string) (*model.Word, error) {
+	if sourceWord == "" || sourceLanguage == "" {
+		return nil, fmt.Errorf("word and language must not be empty")
+	}
+	var word model.Word
+	tx := r.DB.Begin()
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	err := tx.Where("word = ? and language = ?", sourceWord, sourceLanguage).First(&word).Error
+	if err != nil {
+		tx.Rollback()
+		return nil, fmt.Errorf("word is missing in database")
+	}
+	word.Word = updatedWord
+
+	err = tx.Save(&word).Error
+	if err != nil {
+		tx.Rollback()
+		return nil, fmt.Errorf("an error has occured while updating word")
+	}
+
+	tx.Commit()
+	return &word, nil
+}
+
+// DeleteTranslation is the resolver for the deleteTranslation field.
+func (r *mutationResolver) DeleteTranslation(ctx context.Context, sourceWord string, sourceWordLanguage string, translatedWord string, translatedWordLanguage string) (*model.Translation, error) {
+	panic(fmt.Errorf("not implemented: DeleteTranslation - deleteTranslation"))
 }
 
 // GetPolishWords is the resolver for the getPolishWords field.
 func (r *queryResolver) GetPolishWords(ctx context.Context, englishWord string) ([]*model.Word, error) {
 	translatedWords, err := utils.GetTranslations(englishWord, "EN", r.DB)
 	if err != nil {
-		return nil, fmt.Errorf("an error has while getting translations for english word")
+		return nil, err
 	}
 	return translatedWords, nil
 }
@@ -118,24 +148,9 @@ func (r *queryResolver) GetPolishWords(ctx context.Context, englishWord string) 
 func (r *queryResolver) GetEnglishWords(ctx context.Context, polishWord string) ([]*model.Word, error) {
 	translatedWords, err := utils.GetTranslations(polishWord, "PL", r.DB)
 	if err != nil {
-		return nil, fmt.Errorf("an error has while getting translations for polish word")
+		return nil, err
 	}
 	return translatedWords, nil
-}
-
-// WordID is the resolver for the wordID field.
-func (r *translationResolver) WordID(ctx context.Context, obj *model.Translation) (string, error) {
-	panic(fmt.Errorf("not implemented: WordID - wordID"))
-}
-
-// TranslationID is the resolver for the translationID field.
-func (r *translationResolver) TranslationID(ctx context.Context, obj *model.Translation) (string, error) {
-	panic(fmt.Errorf("not implemented: TranslationID - translationID"))
-}
-
-// ID is the resolver for the id field.
-func (r *wordResolver) ID(ctx context.Context, obj *model.Word) (string, error) {
-	panic(fmt.Errorf("not implemented: ID - id"))
 }
 
 // Mutation returns MutationResolver implementation.
@@ -144,13 +159,5 @@ func (r *Resolver) Mutation() MutationResolver { return &mutationResolver{r} }
 // Query returns QueryResolver implementation.
 func (r *Resolver) Query() QueryResolver { return &queryResolver{r} }
 
-// Translation returns TranslationResolver implementation.
-func (r *Resolver) Translation() TranslationResolver { return &translationResolver{r} }
-
-// Word returns WordResolver implementation.
-func (r *Resolver) Word() WordResolver { return &wordResolver{r} }
-
 type mutationResolver struct{ *Resolver }
 type queryResolver struct{ *Resolver }
-type translationResolver struct{ *Resolver }
-type wordResolver struct{ *Resolver }

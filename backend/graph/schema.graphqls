@@ -19,5 +19,6 @@ type Mutation {
   addTranslation(englishWord: String!, polishWord: String!): Translation!
   addWord(word: String!, language: String!, exampleUsage: String!): Word!
   deleteWord(word: String!, language: String!): Word!
-  updateWord(word: String!, language: String!, exampleUsage: String!): Word!
+  updateWord(sourceWord: String!, sourceLanguage: String!, updatedWord: String!, updatedExampleUsage: String!): Word!
+  deleteTranslation(sourceWord: String!, sourceWordLanguage: String!, translatedWord: String!, translatedWordLanguage: String!): Translation!
 }
