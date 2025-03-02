@@ -5,6 +5,7 @@ import (
 	"backend/graph"
 	"context"
 	"fmt"
+	"github.com/stretchr/testify/require"
 	"log"
 	"testing"
 
@@ -98,7 +99,6 @@ func TestAddTranslation_Concurrent(t *testing.T) {
 		<-done
 	}
 	db.Find(&model.Translation{}).Count(&count)
-	fmt.Println(count)
 	assert.Equal(t, int64(1), count, "Translation should be stored in the database")
 
 	err := clearTestTables(db)
@@ -130,6 +130,130 @@ func TestAddTranslation_ConcurrencyWithDuplicate(t *testing.T) {
 		<-done
 	}
 	err = clearTestTables(db)
+	if err != nil {
+		return
+	}
+}
+
+func TestAddWord_NewWord(t *testing.T) {
+	db := setupTestDB()
+	r := (&graph.Resolver{DB: db}).Mutation()
+
+	word := "hello"
+	language := "EN"
+	exampleUsage := "A common greeting."
+
+	addedWord, err := r.AddWord(context.Background(), word, language, exampleUsage)
+
+	require.NoError(t, err, "Expected no error while adding word")
+	assert.NotNil(t, addedWord, "Added word should not be nil")
+	assert.Equal(t, word, addedWord.Word, "The word should be correctly added")
+	assert.Equal(t, language, addedWord.Language, "The language should be correctly added")
+	assert.Equal(t, exampleUsage, addedWord.ExampleUsage, "The example usage should be correctly added")
+	err = clearTestTables(db)
+	if err != nil {
+		return
+	}
+}
+
+func TestAddWord_ExistingWord(t *testing.T) {
+	db := setupTestDB()
+	r := (&graph.Resolver{DB: db}).Mutation()
+
+	word := "hello"
+	language := "EN"
+	exampleUsage := "A common greeting."
+
+	_, err := r.AddWord(context.Background(), word, language, exampleUsage)
+	require.NoError(t, err, "Expected no error while adding word for the first time")
+
+	addedWord, err := r.AddWord(context.Background(), word, language, exampleUsage)
+
+	require.NoError(t, err, "Expected no error while adding existing word")
+	assert.NotNil(t, addedWord, "Added word should not be nil")
+	assert.Equal(t, word, addedWord.Word, "The word should be the same")
+	assert.Equal(t, language, addedWord.Language, "The language should be the same")
+	assert.Equal(t, exampleUsage, addedWord.ExampleUsage, "The example usage should be the same")
+	err = clearTestTables(db)
+	if err != nil {
+		return
+	}
+}
+
+func TestAddWord_ErrorHandling(t *testing.T) {
+	db := setupTestDB()
+	r := (&graph.Resolver{DB: db}).Mutation()
+
+	word := ""
+	language := "EN"
+	exampleUsage := "A common greeting."
+
+	addedWord, err := r.AddWord(context.Background(), word, language, exampleUsage)
+
+	require.Error(t, err, "Expected an error due to invalid word input")
+	assert.Nil(t, addedWord, "Added word should be nil due to the error")
+	err = clearTestTables(db)
+	if err != nil {
+		return
+	}
+}
+
+func TestAddWord_ConcurrentSameWord(t *testing.T) {
+	db := setupTestDB()
+	r := (&graph.Resolver{DB: db}).Mutation()
+
+	word := "hello"
+	language := "EN"
+	exampleUsage := "A common greeting."
+
+	_, err := r.AddWord(context.Background(), word, language, exampleUsage)
+
+	done := make(chan bool)
+	for i := 0; i < 10; i++ {
+		go func() {
+			_, _ = r.AddWord(context.Background(), word, language, exampleUsage)
+			done <- true
+		}()
+	}
+
+	for i := 0; i < 10; i++ {
+		<-done
+	}
+	var count int64
+	db.Find(&model.Word{}).Count(&count)
+	assert.Equal(t, int64(1), count, "Only one word inserted")
+
+	err = clearTestTables(db)
+	if err != nil {
+		return
+	}
+}
+
+func TestAddWord_ConcurrentDifferentWords(t *testing.T) {
+	db := setupTestDB()
+	r := (&graph.Resolver{DB: db}).Mutation()
+
+	word := "hello"
+	language := "EN"
+	exampleUsage := "A common greeting."
+
+	done := make(chan bool)
+	for i := 0; i < 10; i++ {
+		go func() {
+			changedWord := word + string(rune(i+64)) //adding some salt
+			_, _ = r.AddWord(context.Background(), changedWord, language, exampleUsage)
+			done <- true
+		}()
+	}
+
+	for i := 0; i < 10; i++ {
+		<-done
+	}
+	var count int64
+	db.Find(&model.Word{}).Count(&count)
+	assert.Equal(t, int64(10), count, "Only one word inserted")
+
+	err := clearTestTables(db)
 	if err != nil {
 		return
 	}

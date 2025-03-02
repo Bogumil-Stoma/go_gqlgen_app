@@ -57,7 +57,9 @@ func (r *mutationResolver) AddWord(ctx context.Context, word string, language st
 	defer func() {
 		tx.Rollback()
 	}()
-
+	if word == "" || language == "" {
+		return nil, fmt.Errorf("word and language must not be empty")
+	}
 	err := tx.FirstOrCreate(&addedWord, model.Word{Word: word, Language: language, ExampleUsage: exampleUsage}).Error
 	if err != nil {
 		return nil, fmt.Errorf("an error has occured while inserting word")
