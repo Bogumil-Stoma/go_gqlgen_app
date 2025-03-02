@@ -10,7 +10,7 @@ func GetTranslations(wordToTranslate string, language string, DB *gorm.DB) ([]*m
 	var word model.Word
 	var translatedWords []*model.Word
 	var translations []*model.Translation
-	var translatedWordIDS []string
+	var translatedWordIDS []uint
 
 	tx := DB.Begin()
 	defer func() {

@@ -1,8 +1,8 @@
 package model
 
 type Translation struct {
-	WordID        string `json:"wordID"`
-	TranslationID string `json:"translationID"`
+	WordID        uint `json:"wordID"`
+	TranslationID uint `json:"translationID"`
 }
 
 func (translation *Translation) SortTranslation() {

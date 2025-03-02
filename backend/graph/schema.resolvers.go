@@ -21,19 +21,15 @@ func (r *mutationResolver) AddTranslation(ctx context.Context, englishWord strin
 
 	tx := r.DB.Begin()
 	defer func() {
-		if r := recover(); r != nil {
-			tx.Rollback()
-		}
+		tx.Rollback()
 	}()
 
 	err := tx.FirstOrCreate(&engWord, model.Word{Word: englishWord, Language: "EN"}).Error
 	if err != nil {
-		tx.Rollback()
 		return nil, fmt.Errorf("an error has occured while inserting english word")
 	}
 	err = tx.FirstOrCreate(&plWord, model.Word{Word: polishWord, Language: "PL"}).Error
 	if err != nil {
-		tx.Rollback()
 		return nil, fmt.Errorf("an error has occured while inserting polish word")
 	}
 
@@ -42,13 +38,11 @@ func (r *mutationResolver) AddTranslation(ctx context.Context, englishWord strin
 
 	err = tx.Where("word_id = ? AND translation_id = ?", sortedTranslation.WordID, sortedTranslation.TranslationID).First(&existingTranslation).Error
 	if err == nil {
-		tx.Rollback()
 		return nil, fmt.Errorf("translation already exists")
 	}
 
 	err = tx.Create(&sortedTranslation).Error
 	if err != nil {
-		tx.Rollback()
 		return nil, fmt.Errorf("an error has occured while inserting translation")
 	}
 
@@ -61,14 +55,11 @@ func (r *mutationResolver) AddWord(ctx context.Context, word string, language st
 	var addedWord model.Word
 	tx := r.DB.Begin()
 	defer func() {
-		if r := recover(); r != nil {
-			tx.Rollback()
-		}
+		tx.Rollback()
 	}()
 
 	err := tx.FirstOrCreate(&addedWord, model.Word{Word: word, Language: language, ExampleUsage: exampleUsage}).Error
 	if err != nil {
-		tx.Rollback()
 		return nil, fmt.Errorf("an error has occured while inserting word")
 	}
 
@@ -81,18 +72,14 @@ func (r *mutationResolver) DeleteWord(ctx context.Context, word string, language
 	var deletedWord model.Word
 	tx := r.DB.Begin()
 	defer func() {
-		if r := recover(); r != nil {
-			tx.Rollback()
-		}
+		tx.Rollback()
 	}()
 	err := tx.Where("word = ? and language = ?", word, language).First(&deletedWord).Error
 	if err != nil {
-		tx.Rollback()
 		return nil, fmt.Errorf("word is missing in database")
 	}
 	err = tx.Select(clause.Associations).Delete(&deletedWord).Error
 	if err != nil {
-		tx.Rollback()
 		return nil, fmt.Errorf("an error has occured while removing word")
 	}
 
@@ -108,21 +95,18 @@ func (r *mutationResolver) UpdateWord(ctx context.Context, sourceWord string, so
 	var word model.Word
 	tx := r.DB.Begin()
 	defer func() {
-		if r := recover(); r != nil {
-			tx.Rollback()
-		}
+		tx.Rollback()
 	}()
 
 	err := tx.Where("word = ? and language = ?", sourceWord, sourceLanguage).First(&word).Error
 	if err != nil {
-		tx.Rollback()
 		return nil, fmt.Errorf("word is missing in database")
 	}
+
 	word.Word = updatedWord
 
 	err = tx.Save(&word).Error
 	if err != nil {
-		tx.Rollback()
 		return nil, fmt.Errorf("an error has occured while updating word")
 	}
 

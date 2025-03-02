@@ -1,0 +1,14 @@
+services:
+  postgres_test:
+    image: postgres:latest
+    restart: always
+    env_file:
+      - /backend/tests/.env
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    
+
+volumes:
+  postgres_data:
