@@ -22,12 +22,25 @@ func init() {
 }
 
 func setupTestMutation(t *testing.T) (*gorm.DB, graph.MutationResolver) {
-	db := setupTestDB() // Assuming setupTestDB is a function that sets up your DB connection.
+	db := setupTestDB()
 	r := (&graph.Resolver{DB: db}).Mutation()
 
 	t.Cleanup(func() {
-		// Cleanup function that runs at the end of each test.
-		err := clearTestTables(db) // Your cleanup function.
+		err := clearTestTables(db)
+		if err != nil {
+			t.Fatalf("Failed to clear test tables: %v", err)
+		}
+	})
+
+	return db, r
+}
+
+func setupTestQuery(t *testing.T) (*gorm.DB, graph.QueryResolver) {
+	db := setupTestDB()
+	r := (&graph.Resolver{DB: db}).Query()
+
+	t.Cleanup(func() {
+		err := clearTestTables(db)
 		if err != nil {
 			t.Fatalf("Failed to clear test tables: %v", err)
 		}
@@ -280,4 +293,122 @@ func TestDeleteWord_TranslationsAlsoDeleted(t *testing.T) {
 	err = db.Model(&model.Translation{}).Count(&count).Error
 	require.NoError(t, err, "Expected no error when counting translations in database")
 	assert.Equal(t, int64(0), count, "Translation should be deleted from the database")
+}
+
+func TestUpdateWord_Success(t *testing.T) {
+	_, r := setupTestMutation(t)
+
+	sourceWord := "hello"
+	sourceLanguage := "EN"
+	updatedWord := "hi"
+	updatedExampleUsage := "updated usage"
+
+	_, err := r.AddWord(context.Background(), sourceWord, sourceLanguage, "old usage")
+	assert.NoError(t, err)
+
+	word, err := r.UpdateWord(context.Background(), sourceWord, sourceLanguage, updatedWord, updatedExampleUsage)
+	assert.NoError(t, err)
+	assert.Equal(t, updatedWord, word.Word)
+	assert.Equal(t, updatedExampleUsage, word.ExampleUsage)
+}
+
+func TestUpdateWord_WordNotFound(t *testing.T) {
+	_, r := setupTestMutation(t)
+
+	sourceWord := "nonexistent"
+	sourceLanguage := "EN"
+	updatedWord := "hi"
+	updatedExampleUsage := "updated usage"
+
+	word, err := r.UpdateWord(context.Background(), sourceWord, sourceLanguage, updatedWord, updatedExampleUsage)
+	assert.Error(t, err)
+	assert.Nil(t, word)
+}
+
+func TestUpdateWord_EmptyWord(t *testing.T) {
+	_, r := setupTestMutation(t)
+
+	sourceWord := ""
+	sourceLanguage := "EN"
+	updatedWord := "hi"
+	updatedExampleUsage := "updated usage"
+
+	word, err := r.UpdateWord(context.Background(), sourceWord, sourceLanguage, updatedWord, updatedExampleUsage)
+	assert.Error(t, err)
+	assert.Nil(t, word)
+}
+
+func TestUpdateWord_EmptyLanguage(t *testing.T) {
+	_, r := setupTestMutation(t)
+
+	sourceWord := "hello"
+	sourceLanguage := ""
+	updatedWord := "hi"
+	updatedExampleUsage := "updated usage"
+
+	word, err := r.UpdateWord(context.Background(), sourceWord, sourceLanguage, updatedWord, updatedExampleUsage)
+	assert.Error(t, err)
+	assert.Nil(t, word)
+}
+
+func TestGetPolishWords_NoWord(t *testing.T) {
+	_, r := setupTestQuery(t)
+
+	words, err := r.GetPolishWords(context.Background(), "nonexistent")
+	assert.Error(t, err)
+	assert.Nil(t, words)
+}
+
+func TestGetPolishWords_TwoTranslations(t *testing.T) {
+	_, rq := setupTestQuery(t)
+	_, rm := setupTestMutation(t)
+
+	_, _ = rm.AddTranslation(context.Background(), "run", "biegać")
+	_, _ = rm.AddTranslation(context.Background(), "run", "truchtać")
+
+	words, err := rq.GetPolishWords(context.Background(), "run")
+	assert.Equal(t, 2, len(words))
+	assert.Nil(t, err)
+
+}
+
+func TestGetPolishWords_NoTranslation(t *testing.T) {
+	_, r := setupTestQuery(t)
+	_, rm := setupTestMutation(t)
+
+	_, _ = rm.AddWord(context.Background(), "run", "EN", "")
+	words, err := r.GetPolishWords(context.Background(), "run")
+	assert.Error(t, err)
+	assert.Nil(t, words)
+}
+
+func TestGetEnglishWords_NoWord(t *testing.T) {
+	_, r := setupTestQuery(t)
+
+	words, err := r.GetEnglishWords(context.Background(), "nonexistent")
+	assert.Error(t, err)
+	assert.Nil(t, words)
+}
+
+func TestGetEnglishWords_TwoTranslations(t *testing.T) {
+	_, rq := setupTestQuery(t)
+	_, rm := setupTestMutation(t)
+
+	_, _ = rm.AddTranslation(context.Background(), "run", "biegać")
+	_, _ = rm.AddTranslation(context.Background(), "run", "truchtać")
+
+	words, err := rq.GetEnglishWords(context.Background(), "biegać")
+	assert.Equal(t, 1, len(words))
+	assert.Nil(t, err)
+
+}
+
+func TestGetEnglishWords_NoTranslation(t *testing.T) {
+	_, r := setupTestQuery(t)
+	_, rm := setupTestMutation(t)
+
+	_, _ = rm.AddWord(context.Background(), "run", "PL", "")
+	words, err := r.GetEnglishWords(context.Background(), "run")
+	assert.Error(t, err)
+	assert.Nil(t, words)
 }

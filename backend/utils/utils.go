@@ -14,21 +14,18 @@ func GetTranslations(wordToTranslate string, language string, DB *gorm.DB) ([]*m
 
 	tx := DB.Begin()
 	defer func() {
-		if r := recover(); r != nil {
-			tx.Rollback()
-		}
+		tx.Rollback()
+
 	}()
 
 	err := tx.Where("word = ? and language = ?", wordToTranslate, language).First(&word).Error
 	if err != nil {
-		tx.Rollback()
-		return nil, fmt.Errorf("an error has occured while selecting word")
+		return nil, fmt.Errorf("give word is not in database")
 	}
 
 	err = tx.Where("translation_id = ? or word_id = ?", word.ID, word.ID).Find(&translations).Error
-	if err != nil {
-		tx.Rollback()
-		return nil, fmt.Errorf("an error has occured while selecting translation ids")
+	if err != nil || len(translations) == 0 {
+		return nil, fmt.Errorf("no translations of given word were found")
 	}
 
 	for _, t := range translations {
@@ -41,7 +38,6 @@ func GetTranslations(wordToTranslate string, language string, DB *gorm.DB) ([]*m
 
 	err = tx.Where("id in (?)", translatedWordIDS).Find(&translatedWords).Error
 	if err != nil {
-		tx.Rollback()
 		return nil, fmt.Errorf("an error has occured while selecting translations")
 	}
 

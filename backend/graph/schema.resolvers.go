@@ -106,7 +106,7 @@ func (r *mutationResolver) UpdateWord(ctx context.Context, sourceWord string, so
 	}
 
 	word.Word = updatedWord
-
+	word.ExampleUsage = updatedExampleUsage
 	err = tx.Save(&word).Error
 	if err != nil {
 		return nil, fmt.Errorf("an error has occured while updating word")
