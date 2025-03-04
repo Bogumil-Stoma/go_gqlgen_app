@@ -18,35 +18,30 @@ import (
 func (r *mutationResolver) AddTranslation(ctx context.Context, sourceText string, sourceTextLanguage string, translatedText string, translatedTextLanguage string) (*model.Translation, error) {
 	var sourceWord model.Word
 	var translatedWord model.Word
-	var existingTranslation model.Translation
 
 	tx := r.DB.Begin()
 	defer func() {
 		tx.Rollback()
 	}()
-
+	if sourceText == "" || sourceTextLanguage == "" || translatedText == "" || translatedTextLanguage == "" {
+		return nil, fmt.Errorf("word and language must not be empty")
+	}
 	err := tx.FirstOrCreate(&sourceWord, model.Word{Text: sourceText, Language: sourceTextLanguage}).Error
 	if err != nil {
-		return nil, fmt.Errorf("an error has occured while inserting source word")
+		return nil, fmt.Errorf("an error has occured while inserting source word: %w", err)
 	}
 	err = tx.FirstOrCreate(&translatedWord, model.Word{Text: translatedText, Language: translatedTextLanguage}).Error
 	if err != nil {
-		return nil, fmt.Errorf("an error has occured while inserting translated word")
+		return nil, fmt.Errorf("an error has occured while inserting translated word: %w", err)
 	}
 
 	sortedTranslation := model.Translation{WordID: translatedWord.ID, TranslationID: sourceWord.ID}
 	sortedTranslation.SortTranslation()
 
-	err = tx.Where("word_id = ? AND translation_id = ?", sortedTranslation.WordID, sortedTranslation.TranslationID).First(&existingTranslation).Error
-	if err == nil {
-		return nil, fmt.Errorf("translation already exists")
-	}
-
-	err = tx.Create(&sortedTranslation).Error
+	err = tx.FirstOrCreate(&sortedTranslation, sortedTranslation).Error
 	if err != nil {
 		return nil, fmt.Errorf("database error while inserting translation: %w", err)
 	}
-	fmt.Println(sortedTranslation)
 	tx.Commit()
 
 	return &sortedTranslation, nil
@@ -80,7 +75,7 @@ func (r *mutationResolver) DeleteWord(ctx context.Context, text string, language
 	}()
 	err := tx.Where("text = ? and language = ?", text, language).First(&deletedWord).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, nil
+		return &model.Word{}, nil
 	} else if err != nil {
 		return nil, fmt.Errorf("database error while finding word: %w", err)
 	}
@@ -106,7 +101,7 @@ func (r *mutationResolver) UpdateWord(ctx context.Context, sourceText string, so
 
 	err := tx.Where("text = ? and language = ?", sourceText, sourceLanguage).First(&word).Error
 	if err != nil {
-		return nil, fmt.Errorf("word is missing in database")
+		return nil, fmt.Errorf("word is missing in database: %w", err)
 	}
 
 	word.Text = updatedText
@@ -123,33 +118,31 @@ func (r *mutationResolver) UpdateWord(ctx context.Context, sourceText string, so
 // DeleteTranslation is the resolver for the deleteTranslation field.
 func (r *mutationResolver) DeleteTranslation(ctx context.Context, sourceText string, sourceTextLanguage string, translatedText string, translatedTextLanguage string) (*model.Translation, error) {
 	var sourceWord, translatedWord model.Word
+	var resultTranslation model.Translation
 
 	tx := r.DB.Begin()
 	defer func() { tx.Rollback() }()
 
 	err := tx.First(&sourceWord, model.Word{Text: sourceText, Language: sourceTextLanguage}).Error
 	if err != nil {
-		return nil, fmt.Errorf("source word not found in database")
+		return &model.Translation{}, nil
 	}
 
 	err = tx.First(&translatedWord, model.Word{Text: translatedText, Language: translatedTextLanguage}).Error
 	if err != nil {
-		return nil, fmt.Errorf("translated word not found in database")
+		return &model.Translation{}, nil
 	}
 
 	sortedTranslation := model.Translation{WordID: sourceWord.ID, TranslationID: translatedWord.ID}
 	sortedTranslation.SortTranslation()
 
-	result := tx.Where("word_id = ? AND translation_id = ?", sortedTranslation.WordID, sortedTranslation.TranslationID).Delete(&sortedTranslation)
+	result := tx.Where("word_id = ? AND translation_id = ?", sortedTranslation.WordID, sortedTranslation.TranslationID).Delete(&resultTranslation)
 	if result.Error != nil {
 		return nil, fmt.Errorf("database error while deleting translation: %w", result.Error)
 	}
-	if result.RowsAffected == 0 {
-		return nil, nil
-	}
 
 	tx.Commit()
-	return &sortedTranslation, nil
+	return &resultTranslation, nil
 }
 
 // GetTranslations is the resolver for the getTranslations field.
@@ -166,12 +159,12 @@ func (r *queryResolver) GetTranslations(ctx context.Context, textToTranslate str
 
 	err := tx.Where("text = ? and language = ?", textToTranslate, language).First(&word).Error
 	if err != nil {
-		return nil, fmt.Errorf("give word is not in database")
+		return nil, fmt.Errorf("give word is not in database: %w", err)
 	}
 
 	err = tx.Where("translation_id = ? or word_id = ?", word.ID, word.ID).Find(&translations).Error
-	if err != nil || len(translations) == 0 {
-		return nil, fmt.Errorf("no translations of given word were found")
+	if err != nil {
+		return nil, fmt.Errorf("no translations of given word were found: %w", err)
 	}
 
 	for _, t := range translations {
