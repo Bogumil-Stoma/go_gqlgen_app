@@ -28,3 +28,4 @@ go.work.sum
 /.idea/inspectionProfiles/Project_Default.xml
 /.idea/.gitignore
 /.idea/go_gqlgen_app.iml
+/.idea/dataSources.xml
