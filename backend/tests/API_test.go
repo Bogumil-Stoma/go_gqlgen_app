@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/stretchr/testify/require"
 	"log"
+	"strconv"
 	"testing"
 
 	"backend/graph/model"
@@ -427,4 +428,82 @@ func TestDeleteTranslationPLtoEN_NoTranslation(t *testing.T) {
 	translation, err := r.DeleteTranslation(context.Background(), polishWord, "PL", englishWord, "EN")
 	assert.NoError(t, err)
 	assert.Nil(t, translation)
+}
+
+func TestDeleteWord_Concurrent(t *testing.T) {
+	db, r := setupTestMutation(t)
+
+	word := "hello"
+	language := "EN"
+	exampleUsage := "A common greeting."
+	_, _ = r.AddWord(context.Background(), word, language, exampleUsage)
+
+	done := make(chan bool)
+	for i := 0; i < 10; i++ {
+		go func() {
+			_, err := r.DeleteWord(context.Background(), word, language)
+			assert.NoError(t, err)
+			done <- true
+		}()
+	}
+
+	for i := 0; i < 10; i++ {
+		<-done
+	}
+	var count int64
+	db.Find(&model.Word{}).Count(&count)
+	assert.Equal(t, int64(0), count, "No words in db")
+}
+
+func TestDeleteTranslation_Concurrent(t *testing.T) {
+	db, r := setupTestMutation(t)
+
+	englishWord := "hello"
+	polishWord := "cześć"
+
+	_, _ = r.AddTranslation(context.Background(), polishWord, "PL", englishWord, "EN")
+
+	done := make(chan bool)
+	for i := 0; i < 10; i++ {
+		go func() {
+			_, err := r.DeleteTranslation(context.Background(), polishWord, "PL", englishWord, "EN")
+			assert.NoError(t, err)
+			done <- true
+		}()
+	}
+
+	for i := 0; i < 10; i++ {
+		<-done
+	}
+	var count int64
+	db.Find(&model.Translation{}).Count(&count)
+	assert.Equal(t, int64(0), count, "No words in db")
+}
+
+func TestUpdateWord_Concurrent(t *testing.T) {
+	db, r := setupTestMutation(t)
+
+	word := "hello"
+	language := "EN"
+	exampleUsage := "A common greeting."
+	_, _ = r.AddWord(context.Background(), word, language, exampleUsage)
+
+	done := make(chan bool)
+	for i := 0; i < 10; i++ {
+		go func() {
+			changedExample := "updated " + strconv.Itoa(i)
+			_, err := r.UpdateWord(context.Background(), word, language, word, changedExample)
+			assert.NoError(t, err)
+			done <- true
+		}()
+	}
+
+	for i := 0; i < 10; i++ {
+		<-done
+	}
+	var count int64
+	var updatedWord model.Word
+	db.Find(&updatedWord).Count(&count)
+	assert.Equal(t, int64(1), count, "One word in db")
+	assert.Contains(t, updatedWord.ExampleUsage, "updated ", "Word updated")
 }
