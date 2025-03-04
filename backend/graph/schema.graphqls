@@ -1,0 +1,24 @@
+type Word {
+  id: ID!
+  text: String!
+  language: String!
+  exampleUsage: String!
+}
+
+type Translation {
+  wordID: ID!
+  translationID: ID!
+}
+
+type Query {
+  getTranslations(textToTranslate: String!, language: String!): [Word!]!
+
+}
+
+type Mutation {
+  addTranslation(sourceText: String!, sourceTextLanguage: String!, translatedText: String!, translatedTextLanguage: String!): Translation!
+  addWord(text: String!, language: String!, exampleUsage: String!): Word!
+  deleteWord(text: String!, language: String!): Word!
+  updateWord(sourceText: String!, sourceLanguage: String!, updatedText: String!, updatedExampleUsage: String!): Word!
+  deleteTranslation(sourceText: String!, sourceTextLanguage: String!, translatedText: String!, translatedTextLanguage: String!): Translation!
+}
