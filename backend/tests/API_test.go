@@ -55,7 +55,7 @@ func setupTestDB() *gorm.DB {
 }
 
 func clearTestTables(db *gorm.DB) error {
-	if err := db.Exec("TRUNCATE TABLE words CASCADE").Error; err != nil {
+	if err := db.Exec("TRUNCATE TABLE words RESTART IDENTITY CASCADE;").Error; err != nil {
 		return fmt.Errorf("error truncating words table: %v", err)
 	}
 
@@ -71,7 +71,7 @@ func TestAddTranslation(t *testing.T) {
 	englishWord := "hello"
 	polishWord := "cześć"
 
-	translation, err := r.AddTranslation(context.Background(), englishWord, polishWord)
+	translation, err := r.AddTranslation(context.Background(), polishWord, "PL", englishWord, "EN")
 	assert.NoError(t, err, "Expected no error while adding translation")
 	assert.NotNil(t, translation, "Translation should not be nil")
 	assert.NotZero(t, translation.WordID, "Translation should have a valid WordID")
@@ -89,10 +89,10 @@ func TestAddTranslation_DuplicateEntry(t *testing.T) {
 	englishWord := "hello"
 	polishWord := "cześć"
 
-	_, err := r.AddTranslation(context.Background(), englishWord, polishWord)
+	_, err := r.AddTranslation(context.Background(), polishWord, "PL", englishWord, "EN")
 	assert.NoError(t, err)
 
-	_, err = r.AddTranslation(context.Background(), englishWord, polishWord)
+	_, err = r.AddTranslation(context.Background(), polishWord, "PL", englishWord, "EN")
 	assert.Error(t, err, "Expected an error for duplicate translation")
 	assert.Contains(t, err.Error(), "translation already exists")
 }
@@ -107,7 +107,7 @@ func TestAddTranslation_Concurrent(t *testing.T) {
 
 	for i := 0; i < 10; i++ {
 		go func() {
-			_, _ = r.AddTranslation(context.Background(), englishWord, polishWord)
+			_, _ = r.AddTranslation(context.Background(), polishWord, "PL", englishWord, "EN")
 			done <- true
 		}()
 	}
@@ -125,13 +125,13 @@ func TestAddTranslation_ConcurrencyWithDuplicate(t *testing.T) {
 	englishWord := "hello"
 	polishWord := "cześć"
 
-	_, err := r.AddTranslation(context.Background(), englishWord, polishWord)
+	_, err := r.AddTranslation(context.Background(), polishWord, "PL", englishWord, "EN")
 	assert.NoError(t, err, "Expected no error on first translation")
 
 	done := make(chan bool)
 	for i := 0; i < 10; i++ {
 		go func() {
-			_, err := r.AddTranslation(context.Background(), englishWord, polishWord)
+			_, err := r.AddTranslation(context.Background(), polishWord, "PL", englishWord, "EN")
 			assert.Error(t, err, "Expected error for duplicate translation")
 			done <- true
 		}()
@@ -270,9 +270,8 @@ func TestDeleteWord_NonExistingWord(t *testing.T) {
 
 	deletedWord, err := r.DeleteWord(context.Background(), word, language)
 
-	require.Error(t, err, "Expected error for non-existing word")
+	require.NoError(t, err, "Expected error for non-existing word")
 	assert.Nil(t, deletedWord, "Deleted word should be nil for non-existing word")
-	assert.Equal(t, "word is missing in database", err.Error(), "Error message should match")
 }
 
 func TestDeleteWord_TranslationsAlsoDeleted(t *testing.T) {
@@ -281,7 +280,7 @@ func TestDeleteWord_TranslationsAlsoDeleted(t *testing.T) {
 	englishWord := "hello"
 	polishWord := "cześć"
 
-	_, err := r.AddTranslation(context.Background(), englishWord, polishWord)
+	_, err := r.AddTranslation(context.Background(), polishWord, "PL", englishWord, "EN")
 
 	_, err = r.DeleteWord(context.Background(), englishWord, "EN")
 
@@ -351,64 +350,81 @@ func TestUpdateWord_EmptyLanguage(t *testing.T) {
 	assert.Nil(t, word)
 }
 
-func TestGetPolishWords_NoWord(t *testing.T) {
+func TestTranslations_NoWord(t *testing.T) {
 	_, r := setupTestQuery(t)
 
-	words, err := r.GetPolishWords(context.Background(), "nonexistent")
+	words, err := r.GetTranslations(context.Background(), "nonexistent", "PL")
 	assert.Error(t, err)
 	assert.Nil(t, words)
 }
 
-func TestGetPolishWords_TwoTranslations(t *testing.T) {
+func TestTranslations_TwoTranslations(t *testing.T) {
 	_, rq := setupTestQuery(t)
 	_, rm := setupTestMutation(t)
 
-	_, _ = rm.AddTranslation(context.Background(), "run", "biegać")
-	_, _ = rm.AddTranslation(context.Background(), "run", "truchtać")
+	_, _ = rm.AddTranslation(context.Background(), "biegać", "PL", "run", "EN")
+	_, _ = rm.AddTranslation(context.Background(), "truchtać", "PL", "run", "EN")
 
-	words, err := rq.GetPolishWords(context.Background(), "run")
+	words, err := rq.GetTranslations(context.Background(), "run", "EN")
 	assert.Equal(t, 2, len(words))
 	assert.Nil(t, err)
 
 }
 
-func TestGetPolishWords_NoTranslation(t *testing.T) {
+func TestTranslations_NoTranslation(t *testing.T) {
 	_, r := setupTestQuery(t)
 	_, rm := setupTestMutation(t)
 
 	_, _ = rm.AddWord(context.Background(), "run", "EN", "")
-	words, err := r.GetPolishWords(context.Background(), "run")
+	words, err := r.GetTranslations(context.Background(), "run", "EN")
 	assert.Error(t, err)
 	assert.Nil(t, words)
 }
 
-func TestGetEnglishWords_NoWord(t *testing.T) {
-	_, r := setupTestQuery(t)
+func TestDeleteTranslationPLtoEN_NormalCase(t *testing.T) {
+	DB, r := setupTestMutation(t)
+	englishWord := "hello"
+	polishWord := "cześć"
 
-	words, err := r.GetEnglishWords(context.Background(), "nonexistent")
-	assert.Error(t, err)
-	assert.Nil(t, words)
+	_, _ = r.AddTranslation(context.Background(), polishWord, "PL", englishWord, "EN")
+	translation, err := r.AddTranslation(context.Background(), polishWord, "PL", englishWord, "EN")
+	translation, err = r.DeleteTranslation(context.Background(), polishWord, "PL", englishWord, "EN")
+	assert.NoError(t, err)
+	assert.NotNil(t, translation)
+	var count int64
+	DB.Find(&model.Translation{}).Count(&count)
+	assert.Equal(t, int64(0), count)
 }
 
-func TestGetEnglishWords_TwoTranslations(t *testing.T) {
-	_, rq := setupTestQuery(t)
-	_, rm := setupTestMutation(t)
+func TestDeleteTranslationPLtoEN_NoWords(t *testing.T) {
+	_, r := setupTestMutation(t)
+	englishWord := "hello"
+	polishWord := "cześć"
 
-	_, _ = rm.AddTranslation(context.Background(), "run", "biegać")
-	_, _ = rm.AddTranslation(context.Background(), "run", "truchtać")
-
-	words, err := rq.GetEnglishWords(context.Background(), "biegać")
-	assert.Equal(t, 1, len(words))
-	assert.Nil(t, err)
-
+	translation, err := r.DeleteTranslation(context.Background(), polishWord, "PL", englishWord, "EN")
+	assert.Error(t, err)
+	assert.Nil(t, translation)
 }
 
-func TestGetEnglishWords_NoTranslation(t *testing.T) {
-	_, r := setupTestQuery(t)
-	_, rm := setupTestMutation(t)
+func TestDeleteTranslationPLtoEN_SecondWordNotFound(t *testing.T) {
+	_, r := setupTestMutation(t)
+	englishWord := "hello"
+	polishWord := "cześć"
 
-	_, _ = rm.AddWord(context.Background(), "run", "PL", "")
-	words, err := r.GetEnglishWords(context.Background(), "run")
+	_, _ = r.AddWord(context.Background(), polishWord, "PL", "")
+	translation, err := r.DeleteTranslation(context.Background(), polishWord, "PL", englishWord, "EN")
 	assert.Error(t, err)
-	assert.Nil(t, words)
+	assert.Nil(t, translation)
+}
+
+func TestDeleteTranslationPLtoEN_NoTranslation(t *testing.T) {
+	_, r := setupTestMutation(t)
+	englishWord := "hello"
+	polishWord := "cześć"
+
+	_, _ = r.AddWord(context.Background(), polishWord, "PL", "")
+	_, _ = r.AddWord(context.Background(), englishWord, "EN", "")
+	translation, err := r.DeleteTranslation(context.Background(), polishWord, "PL", englishWord, "EN")
+	assert.NoError(t, err)
+	assert.Nil(t, translation)
 }

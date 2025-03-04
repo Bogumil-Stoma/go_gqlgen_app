@@ -11,14 +11,14 @@ type Translation {
 }
 
 type Query {
-  getPolishWords(englishWord: String!): [Word!]!
-  getEnglishWords(polishWord: String!): [Word!]!
+  getTranslations(textToTranslate: String!, language: String!): [Word!]!
+
 }
 
 type Mutation {
-  addTranslation(englishWord: String!, polishWord: String!): Translation!
-  addWord(word: String!, language: String!, exampleUsage: String!): Word!
-  deleteWord(word: String!, language: String!): Word!
-  updateWord(sourceWord: String!, sourceLanguage: String!, updatedWord: String!, updatedExampleUsage: String!): Word!
-  deleteTranslationPolishWordEnglishWord(polishWord: String!, englishWord: String!): Translation!
+  addTranslation(sourceText: String!, sourceTextLanguage: String!, translatedText: String!, translatedTextLanguage: String!): Translation!
+  addWord(text: String!, language: String!, exampleUsage: String!): Word!
+  deleteWord(text: String!, language: String!): Word!
+  updateWord(sourceText: String!, sourceLanguage: String!, updatedText: String!, updatedExampleUsage: String!): Word!
+  deleteTranslation(sourceText: String!, sourceTextLanguage: String!, translatedText: String!, translatedTextLanguage: String!): Translation!
 }
