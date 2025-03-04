@@ -24,11 +24,11 @@ func (r *mutationResolver) AddTranslation(ctx context.Context, englishWord strin
 		tx.Rollback()
 	}()
 
-	err := tx.FirstOrCreate(&engWord, model.Word{Word: englishWord, Language: "EN"}).Error
+	err := tx.FirstOrCreate(&engWord, model.Word{Text: englishWord, Language: "EN"}).Error
 	if err != nil {
 		return nil, fmt.Errorf("an error has occured while inserting english word")
 	}
-	err = tx.FirstOrCreate(&plWord, model.Word{Word: polishWord, Language: "PL"}).Error
+	err = tx.FirstOrCreate(&plWord, model.Word{Text: polishWord, Language: "PL"}).Error
 	if err != nil {
 		return nil, fmt.Errorf("an error has occured while inserting polish word")
 	}
@@ -45,8 +45,9 @@ func (r *mutationResolver) AddTranslation(ctx context.Context, englishWord strin
 	if err != nil {
 		return nil, fmt.Errorf("an error has occured while inserting translation")
 	}
-
+	fmt.Println(sortedTranslation)
 	tx.Commit()
+
 	return &sortedTranslation, nil
 }
 
@@ -60,7 +61,7 @@ func (r *mutationResolver) AddWord(ctx context.Context, word string, language st
 	if word == "" || language == "" {
 		return nil, fmt.Errorf("word and language must not be empty")
 	}
-	err := tx.FirstOrCreate(&addedWord, model.Word{Word: word, Language: language, ExampleUsage: exampleUsage}).Error
+	err := tx.FirstOrCreate(&addedWord, model.Word{Text: word, Language: language, ExampleUsage: exampleUsage}).Error
 	if err != nil {
 		return nil, fmt.Errorf("an error has occured while inserting word")
 	}
@@ -76,7 +77,7 @@ func (r *mutationResolver) DeleteWord(ctx context.Context, word string, language
 	defer func() {
 		tx.Rollback()
 	}()
-	err := tx.Where("word = ? and language = ?", word, language).First(&deletedWord).Error
+	err := tx.Where("text = ? and language = ?", word, language).First(&deletedWord).Error
 	if err != nil {
 		return nil, fmt.Errorf("word is missing in database")
 	}
@@ -100,12 +101,12 @@ func (r *mutationResolver) UpdateWord(ctx context.Context, sourceWord string, so
 		tx.Rollback()
 	}()
 
-	err := tx.Where("word = ? and language = ?", sourceWord, sourceLanguage).First(&word).Error
+	err := tx.Where("text = ? and language = ?", sourceWord, sourceLanguage).First(&word).Error
 	if err != nil {
 		return nil, fmt.Errorf("word is missing in database")
 	}
 
-	word.Word = updatedWord
+	word.Text = updatedWord
 	word.ExampleUsage = updatedExampleUsage
 	err = tx.Save(&word).Error
 	if err != nil {
@@ -116,9 +117,13 @@ func (r *mutationResolver) UpdateWord(ctx context.Context, sourceWord string, so
 	return &word, nil
 }
 
-// DeleteTranslation is the resolver for the deleteTranslation field.
-func (r *mutationResolver) DeleteTranslation(ctx context.Context, sourceWord string, sourceWordLanguage string, translatedWord string, translatedWordLanguage string) (*model.Translation, error) {
-	panic(fmt.Errorf("not implemented: DeleteTranslation - deleteTranslation"))
+// DeleteTranslationPolishWordEnglishWord is the resolver for the deleteTranslationPolishWordEnglishWord field.
+func (r *mutationResolver) DeleteTranslationPolishWordEnglishWord(ctx context.Context, polishWord string, englishWord string) (*model.Translation, error) {
+	translation, err := utils.DeleteTranslation(r.DB, polishWord, "PL", englishWord, "EN")
+	if err != nil {
+		return nil, err
+	}
+	return translation, nil
 }
 
 // GetPolishWords is the resolver for the getPolishWords field.
@@ -147,3 +152,25 @@ func (r *Resolver) Query() QueryResolver { return &queryResolver{r} }
 
 type mutationResolver struct{ *Resolver }
 type queryResolver struct{ *Resolver }
+
+// !!! WARNING !!!
+// The code below was going to be deleted when updating resolvers. It has been copied here so you have
+// one last chance to move it out of harms way if you want. There are two reasons this happens:
+//  - When renaming or deleting a resolver the old code will be put in here. You can safely delete
+//    it when you're done.
+//  - You have helper methods in this file. Move them out to keep these resolver files clean.
+/*
+	func (r *translationResolver) WordID(ctx context.Context, obj *model.Translation) (int, error) {
+	return int(obj.WordID), nil
+}
+func (r *translationResolver) TranslationID(ctx context.Context, obj *model.Translation) (int, error) {
+	return int(obj.TranslationID), nil
+}
+func (r *wordResolver) ID(ctx context.Context, obj *model.Word) (int, error) {
+	panic(fmt.Errorf("not implemented: ID - id"))
+}
+func (r *Resolver) Translation() TranslationResolver { return &translationResolver{r} }
+func (r *Resolver) Word() WordResolver { return &wordResolver{r} }
+type translationResolver struct{ *Resolver }
+type wordResolver struct{ *Resolver }
+*/

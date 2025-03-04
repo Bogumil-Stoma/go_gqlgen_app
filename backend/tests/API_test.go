@@ -153,7 +153,7 @@ func TestAddWord_NewWord(t *testing.T) {
 
 	require.NoError(t, err, "Expected no error while adding word")
 	assert.NotNil(t, addedWord, "Added word should not be nil")
-	assert.Equal(t, word, addedWord.Word, "The word should be correctly added")
+	assert.Equal(t, word, addedWord.Text, "The word should be correctly added")
 	assert.Equal(t, language, addedWord.Language, "The language should be correctly added")
 	assert.Equal(t, exampleUsage, addedWord.ExampleUsage, "The example usage should be correctly added")
 }
@@ -172,7 +172,7 @@ func TestAddWord_ExistingWord(t *testing.T) {
 
 	require.NoError(t, err, "Expected no error while adding existing word")
 	assert.NotNil(t, addedWord, "Added word should not be nil")
-	assert.Equal(t, word, addedWord.Word, "The word should be the same")
+	assert.Equal(t, word, addedWord.Text, "The word should be the same")
 	assert.Equal(t, language, addedWord.Language, "The language should be the same")
 	assert.Equal(t, exampleUsage, addedWord.ExampleUsage, "The example usage should be the same")
 }
@@ -253,13 +253,13 @@ func TestDeleteWord_ExistingWord(t *testing.T) {
 
 	require.NoError(t, err, "Expected no error while deleting word")
 	assert.NotNil(t, deletedWord, "Deleted word should not be nil")
-	assert.Equal(t, word, deletedWord.Word, "The deleted word should match")
+	assert.Equal(t, word, deletedWord.Text, "The deleted word should match")
 	assert.Equal(t, language, deletedWord.Language, "The deleted word's language should match")
 
 	var count int64
-	err = db.Model(&model.Word{}).Where("word = ? AND language = ?", word, language).Count(&count).Error
+	err = db.Model(&model.Word{}).Where("text = ? AND language = ?", word, language).Count(&count).Error
 	require.NoError(t, err, "Expected no error when counting words in database")
-	assert.Equal(t, int64(0), count, "Word should be deleted from the database")
+	assert.Equal(t, int64(0), count, "Text should be deleted from the database")
 }
 
 func TestDeleteWord_NonExistingWord(t *testing.T) {
@@ -308,7 +308,7 @@ func TestUpdateWord_Success(t *testing.T) {
 
 	word, err := r.UpdateWord(context.Background(), sourceWord, sourceLanguage, updatedWord, updatedExampleUsage)
 	assert.NoError(t, err)
-	assert.Equal(t, updatedWord, word.Word)
+	assert.Equal(t, updatedWord, word.Text)
 	assert.Equal(t, updatedExampleUsage, word.ExampleUsage)
 }
 

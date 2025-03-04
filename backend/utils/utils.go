@@ -10,7 +10,7 @@ func GetTranslations(wordToTranslate string, language string, DB *gorm.DB) ([]*m
 	var word model.Word
 	var translatedWords []*model.Word
 	var translations []*model.Translation
-	var translatedWordIDS []uint
+	var translatedWordIDS []int
 
 	tx := DB.Begin()
 	defer func() {
@@ -18,7 +18,7 @@ func GetTranslations(wordToTranslate string, language string, DB *gorm.DB) ([]*m
 
 	}()
 
-	err := tx.Where("word = ? and language = ?", wordToTranslate, language).First(&word).Error
+	err := tx.Where("text = ? and language = ?", wordToTranslate, language).First(&word).Error
 	if err != nil {
 		return nil, fmt.Errorf("give word is not in database")
 	}
@@ -43,4 +43,35 @@ func GetTranslations(wordToTranslate string, language string, DB *gorm.DB) ([]*m
 
 	tx.Commit()
 	return translatedWords, nil
+}
+
+func DeleteTranslation(DB *gorm.DB, sourceText string, sourceTextLanguage string, translatedText string, translatedTextLanguage string) (*model.Translation, error) {
+	var sourceWord, translatedWord model.Word
+
+	tx := DB.Begin()
+	defer func() {
+		tx.Rollback()
+
+	}()
+
+	err := DB.First(&sourceWord, model.Word{Text: sourceText, Language: sourceTextLanguage}).Error
+	if err != nil {
+		return nil, fmt.Errorf("source word not found in database")
+	}
+
+	err = DB.First(&translatedWord, model.Word{Text: translatedText, Language: translatedTextLanguage}).Error
+	if err != nil {
+		return nil, fmt.Errorf("translated word not found in database")
+	}
+
+	sortedTranslation := model.Translation{WordID: sourceWord.ID, TranslationID: translatedWord.ID}
+	sortedTranslation.SortTranslation()
+
+	err = DB.Where("word_id = ? AND translation_id = ?", sortedTranslation.WordID, sortedTranslation.TranslationID).Delete(&sortedTranslation).Error
+	if err != nil {
+		return nil, fmt.Errorf("translated word not found in database")
+	}
+
+	tx.Commit()
+	return &sortedTranslation, nil
 }

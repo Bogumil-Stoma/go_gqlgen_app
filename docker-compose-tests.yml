@@ -5,10 +5,10 @@ services:
     env_file:
       - /backend/tests/.env
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_test_data:/var/lib/postgresql/data
     ports:
       - "5433:5432"
     
 
 volumes:
-  postgres_data:
+  postgres_test_data:
