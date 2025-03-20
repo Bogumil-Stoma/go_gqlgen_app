@@ -9,6 +9,7 @@ import (
 	"log"
 	"path/filepath"
 	"strconv"
+	"sync"
 	"testing"
 
 	"backend/graph/model"
@@ -16,6 +17,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"gorm.io/gorm"
 )
+
+var dbInstance *gorm.DB
+var once sync.Once
 
 func init() {
 	envPath, err := filepath.Abs("../../.env.test")
@@ -57,8 +61,10 @@ func setupTestQuery(t *testing.T) (*gorm.DB, graph.QueryResolver) {
 }
 
 func setupTestDB() *gorm.DB {
-	db := database.Connect()
-	return db
+	once.Do(func() {
+		dbInstance = database.Connect()
+	})
+	return dbInstance
 }
 
 func clearTestTables(db *gorm.DB) error {
@@ -109,18 +115,12 @@ func TestAddTranslation_Concurrent(t *testing.T) {
 	englishWord := "hello"
 	polishWord := "cześć"
 
-	done := make(chan bool)
+	RunConcurrentTest(t, 1000, func(i int) error {
+		_, err := r.AddTranslation(context.Background(), polishWord, "PL", englishWord, "EN")
+		return err
+	})
 
-	for i := 0; i < 10; i++ {
-		go func() {
-			_, _ = r.AddTranslation(context.Background(), polishWord, "PL", englishWord, "EN")
-			done <- true
-		}()
-	}
 	var count int64
-	for i := 0; i < 10; i++ {
-		<-done
-	}
 	db.Find(&model.Translation{}).Count(&count)
 	assert.Equal(t, int64(1), count, "Translation should be stored in the database")
 }
@@ -134,18 +134,10 @@ func TestAddTranslation_ConcurrencyWithDuplicate(t *testing.T) {
 	_, err := r.AddTranslation(context.Background(), polishWord, "PL", englishWord, "EN")
 	assert.NoError(t, err, "Expected no error on first translation")
 
-	done := make(chan bool)
-	for i := 0; i < 10; i++ {
-		go func() {
-			_, err := r.AddTranslation(context.Background(), polishWord, "PL", englishWord, "EN")
-			assert.NoError(t, err, "Not expecting an error for duplicate translation")
-			done <- true
-		}()
-	}
-
-	for i := 0; i < 10; i++ {
-		<-done
-	}
+	RunConcurrentTest(t, 1000, func(i int) error {
+		_, err := r.AddTranslation(context.Background(), polishWord, "PL", englishWord, "EN")
+		return err
+	})
 
 	var count int64
 	db.Find(&model.Translation{}).Count(&count)
@@ -209,17 +201,28 @@ func TestAddWord_ConcurrentSameWord(t *testing.T) {
 
 	_, _ = r.AddWord(context.Background(), word, language, exampleUsage)
 
-	done := make(chan bool)
-	for i := 0; i < 10; i++ {
-		go func() {
-			_, _ = r.AddWord(context.Background(), word, language, exampleUsage)
-			done <- true
-		}()
-	}
+	RunConcurrentTest(t, 1000, func(i int) error {
+		_, err := r.AddWord(context.Background(), word, language, exampleUsage)
+		return err
+	})
 
-	for i := 0; i < 10; i++ {
-		<-done
-	}
+	var count int64
+	db.Find(&model.Word{}).Count(&count)
+	assert.Equal(t, int64(1), count, "Only one word inserted")
+}
+
+func TestAddWord_ConcurrentSameWordNotExistingBefore(t *testing.T) {
+	db, r := setupTestMutation(t)
+
+	word := "hello"
+	language := "EN"
+	exampleUsage := "A common greeting."
+
+	RunConcurrentTest(t, 1000, func(i int) error {
+		_, err := r.AddWord(context.Background(), word, language, exampleUsage)
+		return err
+	})
+
 	var count int64
 	db.Find(&model.Word{}).Count(&count)
 	assert.Equal(t, int64(1), count, "Only one word inserted")
@@ -232,21 +235,14 @@ func TestAddWord_ConcurrentDifferentWords(t *testing.T) {
 	language := "EN"
 	exampleUsage := "A common greeting."
 
-	done := make(chan bool)
-	for i := 0; i < 10; i++ {
-		go func() {
-			changedWord := word + string(rune(i+64)) //adding some salt
-			_, _ = r.AddWord(context.Background(), changedWord, language, exampleUsage)
-			done <- true
-		}()
-	}
-
-	for i := 0; i < 10; i++ {
-		<-done
-	}
+	RunConcurrentTest(t, 1000, func(i int) error {
+		changedWord := word + string(rune(i+64)) //adding some salt
+		_, err := r.AddWord(context.Background(), changedWord, language, exampleUsage)
+		return err
+	})
 	var count int64
 	db.Find(&model.Word{}).Count(&count)
-	assert.Equal(t, int64(10), count, "Only one word inserted")
+	assert.Equal(t, int64(1000), count, "1000 words inserted")
 }
 
 func TestDeleteWord_ExistingWord(t *testing.T) {
@@ -376,6 +372,7 @@ func TestTranslations_TwoTranslations(t *testing.T) {
 	_, _ = rm.AddTranslation(context.Background(), "truchtać", "PL", "run", "EN")
 
 	words, err := rq.GetTranslations(context.Background(), "run", "EN")
+	fmt.Println("words:", words[0])
 	assert.Equal(t, 2, len(words))
 	assert.Nil(t, err)
 
@@ -450,18 +447,11 @@ func TestDeleteWord_Concurrent(t *testing.T) {
 	exampleUsage := "A common greeting."
 	_, _ = r.AddWord(context.Background(), word, language, exampleUsage)
 
-	done := make(chan bool)
-	for i := 0; i < 10; i++ {
-		go func() {
-			_, err := r.DeleteWord(context.Background(), word, language)
-			assert.NoError(t, err, "No error expected when deleting word existing or non existing")
-			done <- true
-		}()
-	}
+	RunConcurrentTest(t, 1000, func(i int) error {
+		_, err := r.DeleteWord(context.Background(), word, language)
+		return err
+	})
 
-	for i := 0; i < 10; i++ {
-		<-done
-	}
 	var count int64
 	db.Find(&model.Word{}).Count(&count)
 	assert.Equal(t, int64(0), count, "No words in db")
@@ -475,18 +465,11 @@ func TestDeleteTranslation_Concurrent(t *testing.T) {
 
 	_, _ = r.AddTranslation(context.Background(), polishWord, "PL", englishWord, "EN")
 
-	done := make(chan bool)
-	for i := 0; i < 10; i++ {
-		go func() {
-			_, err := r.DeleteTranslation(context.Background(), polishWord, "PL", englishWord, "EN")
-			assert.NoError(t, err, "Graceful deletion")
-			done <- true
-		}()
-	}
+	RunConcurrentTest(t, 1000, func(i int) error {
+		_, err := r.DeleteTranslation(context.Background(), polishWord, "PL", englishWord, "EN")
+		return err
+	})
 
-	for i := 0; i < 10; i++ {
-		<-done
-	}
 	var count int64
 	db.Find(&model.Translation{}).Count(&count)
 	assert.Equal(t, int64(0), count, "No words in db")
@@ -500,22 +483,38 @@ func TestUpdateWord_Concurrent(t *testing.T) {
 	exampleUsage := "A common greeting."
 	_, _ = r.AddWord(context.Background(), word, language, exampleUsage)
 
-	done := make(chan bool)
-	for i := 0; i < 10; i++ {
-		go func() {
-			changedExample := "updated " + strconv.Itoa(i)
-			_, err := r.UpdateWord(context.Background(), word, language, word, changedExample)
-			assert.NoError(t, err)
-			done <- true
-		}()
-	}
+	RunConcurrentTest(t, 1000, func(i int) error {
+		changedExample := "updated " + strconv.Itoa(i)
+		_, err := r.UpdateWord(context.Background(), word, language, word, changedExample)
+		return err
+	})
 
-	for i := 0; i < 10; i++ {
-		<-done
-	}
 	var count int64
 	var updatedWord model.Word
 	db.Find(&updatedWord).Count(&count)
 	assert.Equal(t, int64(1), count, "One word in db")
 	assert.Contains(t, updatedWord.ExampleUsage, "updated ", "Word updated")
+}
+
+func RunConcurrentTest(t *testing.T, numGoroutines int, testFunc func(i int) error) {
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	errors := make(chan error, numGoroutines)
+
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			errors <- testFunc(i)
+		}()
+	}
+
+	close(start)
+	wg.Wait()
+	close(errors)
+
+	for err := range errors {
+		assert.NoError(t, err, "No errors should occur during concurrent execution")
+	}
 }
