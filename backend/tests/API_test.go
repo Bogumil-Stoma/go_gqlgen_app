@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/stretchr/testify/require"
 	"log"
+	"path/filepath"
 	"strconv"
 	"testing"
 
@@ -17,7 +18,12 @@ import (
 )
 
 func init() {
-	if err := godotenv.Load(); err != nil {
+	envPath, err := filepath.Abs("../../.env.test")
+	if err != nil {
+		log.Fatalf("Error resolving .env.test path: %v", err)
+	}
+	fmt.Println(envPath)
+	if err := godotenv.Load(envPath); err != nil {
 		log.Fatal("Error loading .env file")
 	}
 }

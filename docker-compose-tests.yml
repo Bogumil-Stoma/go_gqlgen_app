@@ -3,7 +3,7 @@ services:
     image: postgres:latest
     restart: always
     env_file:
-      - /backend/tests/.env
+      - /.env.test
     volumes:
       - postgres_test_data:/var/lib/postgresql/data
     ports:
