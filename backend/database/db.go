@@ -3,11 +3,11 @@ package database
 import (
 	"backend/graph/model"
 	"fmt"
-	"log"
-	"os"
-
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	"log"
+	"os"
+	"time"
 )
 
 var DB *gorm.DB
@@ -29,6 +29,15 @@ func Connect() *gorm.DB {
 	}
 
 	fmt.Println("Connected to database")
+
+	sqlDB, err := DB.DB()
+	if err != nil {
+		log.Fatal("failed to get SQL DB", err)
+	}
+
+	sqlDB.SetMaxOpenConns(100)
+	sqlDB.SetMaxIdleConns(10)
+	sqlDB.SetConnMaxLifetime(2 * time.Hour)
 
 	err = DB.AutoMigrate(&model.Word{})
 	if err != nil {
