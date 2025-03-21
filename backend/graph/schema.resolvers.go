@@ -26,19 +26,37 @@ func (r *mutationResolver) AddTranslation(ctx context.Context, sourceText string
 	if sourceText == "" || sourceTextLanguage == "" || translatedText == "" || translatedTextLanguage == "" {
 		return nil, fmt.Errorf("word and language must not be empty")
 	}
-	err := tx.FirstOrCreate(&sourceWord, model.Word{Text: sourceText, Language: sourceTextLanguage}).Error
+
+	sourceWord = model.Word{Text: sourceText, Language: sourceTextLanguage}
+	err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&sourceWord).Error
 	if err != nil {
-		return nil, fmt.Errorf("an error has occured while inserting source word: %w", err)
+		return nil, fmt.Errorf("an error occurred while inserting source word: %w", err)
 	}
-	err = tx.FirstOrCreate(&translatedWord, model.Word{Text: translatedText, Language: translatedTextLanguage}).Error
+
+	if sourceWord.ID == 0 {
+		err = tx.First(&sourceWord, "text = ? AND language = ?", sourceText, sourceTextLanguage).Error
+		if err != nil {
+			return nil, fmt.Errorf("an error occurred while selecting source word: %w", err)
+		}
+	}
+
+	translatedWord = model.Word{Text: translatedText, Language: translatedTextLanguage}
+	err = tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&translatedWord).Error
 	if err != nil {
-		return nil, fmt.Errorf("an error has occured while inserting translated word: %w", err)
+		return nil, fmt.Errorf("an error occurred while inserting translated word: %w", err)
+	}
+
+	if translatedWord.ID == 0 {
+		err = tx.First(&translatedWord, "text = ? AND language = ?", translatedText, translatedTextLanguage).Error
+		if err != nil {
+			return nil, fmt.Errorf("an error occurred while selecting translated word: %w", err)
+		}
 	}
 
 	sortedTranslation := model.Translation{WordID: translatedWord.ID, TranslationID: sourceWord.ID}
 	sortedTranslation.SortTranslation()
 
-	err = tx.FirstOrCreate(&sortedTranslation, sortedTranslation).Error
+	err = tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&sortedTranslation).Error
 	if err != nil {
 		return nil, fmt.Errorf("database error while inserting translation: %w", err)
 	}
@@ -57,9 +75,12 @@ func (r *mutationResolver) AddWord(ctx context.Context, text string, language st
 	if text == "" || language == "" {
 		return nil, fmt.Errorf("word and language must not be empty")
 	}
-	err := tx.FirstOrCreate(&addedWord, model.Word{Text: text, Language: language, ExampleUsage: exampleUsage}).Error
+
+	addedWord = model.Word{Text: text, Language: language, ExampleUsage: exampleUsage}
+	err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&addedWord).Error
+
 	if err != nil {
-		return nil, fmt.Errorf("database error while inserting word: %w", err)
+		return nil, fmt.Errorf("error inserting translated word: %w", err)
 	}
 
 	tx.Commit()

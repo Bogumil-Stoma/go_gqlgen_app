@@ -52,7 +52,7 @@ mutation {
 }
 ``
 
-Adds word, text and language must not be empty, throws error when same word with different exampleUsage is added
+Adds word, text and language must not be empty, just returns word if already exists
 
 ---
 ``
